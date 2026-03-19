@@ -1,19 +1,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h> // Rastgelelik için gerekli
 
 #define MAX_ITER 100
 #define EPSILON 0.0001
 
 // Gauss karışım modelinin ana işlevi
-void gaussKarışımModeli(double *veri, int n, int k, double *ortalama, double *varyans, double *pi, double *sonuc) {
+void gaussKarışımModeli(double *veri, int n, int k, double *ortalama, double *varyans, double *pi) {
     int i, j, iterasyon;
+    
+    // Bellek tahsisi (Memory Allocation)
     double *yedekOrtalama = (double*) malloc(k * sizeof(double));
     double *yedekVaryans = (double*) malloc(k * sizeof(double));
     double *olasilik = (double*) malloc(k * sizeof(double));
     double *temp = (double*) malloc(n * k * sizeof(double));
 
     // Başlangıç değerlerini rastgele seç
+    srand(time(NULL)); // Her çalıştığında farklı sonuç için seed ekledik
     for (i = 0; i < k; i++) {
         ortalama[i] = veri[rand() % n];
         varyans[i] = 1.0;
@@ -22,19 +26,28 @@ void gaussKarışımModeli(double *veri, int n, int k, double *ortalama, double 
 
     // Gauss karışım modeli için iterasyonları gerçekleştir
     for (iterasyon = 0; iterasyon < MAX_ITER; iterasyon++) {
-        // Eşleme adımı
+        
+        // Yakınsama kontrolü için mevcut değerleri yedekliyoruz
+        for(int m = 0; m < k; m++) {
+            yedekOrtalama[m] = ortalama[m];
+            yedekVaryans[m] = varyans[m];
+        }
+
+        // Eşleme adımı (Expectation Step)
         for (i = 0; i < n; i++) {
             double normalizasyon = 0.0;
             for (j = 0; j < k; j++) {
+                // Olasılık hesaplama
                 temp[i * k + j] = pi[j] * exp(-0.5 * pow((veri[i] - ortalama[j]) / varyans[j], 2));
                 normalizasyon += temp[i * k + j];
             }
             for (j = 0; j < k; j++) {
-                temp[i * k + j] /= normalizasyon;
+                // Değerleri normalize et
+                temp[i * k + j] /= (normalizasyon + 1e-10); // Sıfıra bölünme hatası koruması
             }
         }
 
-        // Maksimum olabilirlik adımı
+        // Maksimum olabilirlik adımı (Maximization Step)
         for (j = 0; j < k; j++) {
             double normalizasyon = 0.0;
             double tempOrtalama = 0.0;
@@ -43,12 +56,12 @@ void gaussKarışımModeli(double *veri, int n, int k, double *ortalama, double 
                 normalizasyon += temp[i * k + j];
                 tempOrtalama += temp[i * k + j] * veri[i];
             }
-            ortalama[j] = tempOrtalama / normalizasyon;
+            ortalama[j] = tempOrtalama / (normalizasyon + 1e-10);
             for (i = 0; i < n; i++) {
                 tempVaryans += temp[i * k + j] * pow(veri[i] - ortalama[j], 2);
             }
-            varyans[j] = tempVaryans / normalizasyon;
-            olasilik[j] = normalizasyon / n;
+            varyans[j] = tempVaryans / (normalizasyon + 1e-10);
+            pi[j] = normalizasyon / n; // Olasılık güncelleme
         }
 
         // Yakınsama kontrolü
@@ -56,3 +69,14 @@ void gaussKarışımModeli(double *veri, int n, int k, double *ortalama, double 
         for (i = 0; i < k; i++) {
             toplamHata += fabs(ortalama[i] - yedekOrtalama[i]);
             toplamHata += fabs(varyans[i] - yedekVaryans[i]);
+        }
+        
+        if (toplamHata < EPSILON) break; // Hata eşiğin altındaysa dur
+    }
+
+    // --- BELLEK TEMİZLEME (FREE) BÖLÜMÜ ---
+    free(yedekOrtalama);
+    free(yedekVaryans);
+    free(olasilik);
+    free(temp);
+}
